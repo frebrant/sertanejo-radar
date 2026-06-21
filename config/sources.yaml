@@ -1,0 +1,87 @@
+# Sertanejo Radar — fontes de monitoramento
+# Edite livremente: adicionar/remover fontes não exige mexer no código.
+
+# ============================================================================
+# PORTAIS DE FOFOCA / CELEBRIDADES (RSS direto)
+# ============================================================================
+portais:
+  # ✅ confirmados funcionando
+  - { nome: "Leo Dias",          url: "https://portalleodias.com/feed/" }
+  - { nome: "Hugo Gloss",        url: "https://hugogloss.uol.com.br/feed/" }
+  - { nome: "Contigo",           url: "https://contigo.com.br/feed/" }
+  - { nome: "Metropoles Fofoca", url: "https://www.metropoles.com/celebridades/feed" }
+  - { nome: "RD1",               url: "https://rd1.com.br/feed/" }
+  - { nome: "F5 Folha",          url: "https://f5.folha.uol.com.br/feed/" }
+  - { nome: "Jovem Pan",         url: "https://jovempan.com.br/feed" }
+  - { nome: "NaTelinha",         url: "https://natelinha.uol.com.br/feed" }
+  - { nome: "OFuxico",           url: "https://www.ofuxico.com.br/?feed=atom" }
+  # ⚠️ não verificados — podem ou não responder; pipeline ignora falhas
+  - { nome: "Area VIP",          url: "https://www.areavip.com.br/feed/" }
+  - { nome: "Terra Gente",       url: "https://www.terra.com.br/diversao/gente/rss/" }
+  - { nome: "Caras",             url: "https://caras.uol.com.br/feed.xml" }
+  - { nome: "Quem",              url: "https://revistaquem.globo.com/rss/quem.xml" }
+  - { nome: "Hora 7",            url: "https://noticias.r7.com/hora-7/feed.xml" }
+  - { nome: "Pure People",       url: "https://www.purepeople.com.br/rss/news.xml" }
+
+# ============================================================================
+# PORTAIS FOCADOS EM SERTANEJO
+# ============================================================================
+sertanejo:
+  # ✅ confirmados funcionando
+  - { nome: "Portal Sertanejo",     url: "https://portalsertanejo.net/feed/" }
+  - { nome: "Movimento Country",    url: "https://movimentocountry.com/feed/" }
+  - { nome: "Sertanejo Oficial",    url: "https://www.sertanejooficial.com.br/feed/" }
+  - { nome: "Portal Sucesso",       url: "https://web.portalsucesso.com.br/feed/" }
+  # ⚠️ feeds existem mas precisam parser permissivo / podem oscilar
+  - { nome: "Festanejo",            url: "https://festanejo.com.br/feed/" }
+  - { nome: "Melhor Sertanejo",     url: "https://melhorsertanejo.com.br/feed/" }
+  # ⚠️ não verificados — pipeline ignora falha
+  - { nome: "Sertanejo News",       url: "https://sertanejonews.com.br/feed/" }
+  - { nome: "Boa Sertanejo",        url: "https://boasertanejo.com/feed/" }
+
+# ============================================================================
+# TWITTER / X — via instâncias Nitter ou RSSHub (com fallback)
+# ============================================================================
+twitter:
+  # Tenta cada instância nesta ordem; primeira que responder 200 + ter itens vence.
+  instancias_nitter:
+    - "https://nitter.privacydev.net"
+    - "https://nitter.poast.org"
+    - "https://xcancel.com"
+    - "https://nitter.tiekoetter.com"
+  instancias_rsshub:
+    - "https://rsshub.app"
+    - "https://rss.shab.fun"
+  perfis:
+    # ----- Fofoqueiros / portais (cobertura ampla) -----
+    - { handle: "leodias",           tag: "fofoqueiro" }
+    - { handle: "choquei",           tag: "fofoqueiro" }
+    - { handle: "PortalArrependido", tag: "fofoqueiro" }
+    - { handle: "central_fofoca",    tag: "fofoqueiro" }
+    - { handle: "hugogloss",         tag: "fofoqueiro" }
+    - { handle: "metropoles",        tag: "fofoqueiro" }
+    # ----- Oficiais (artistas-foco) -----
+    - { handle: "virginia",          tag: "artista" }
+    - { handle: "murilohuff",        tag: "artista" }
+    - { handle: "leonardo",          tag: "artista" }
+    - { handle: "henriqueejuliano",  tag: "artista" }
+    - { handle: "ZeNeto_Cristiano",  tag: "artista" }
+    - { handle: "JorgeMateus",       tag: "artista" }
+
+# ============================================================================
+# INSTAGRAM — via RSSHub apenas (com fallback de instâncias)
+# ============================================================================
+instagram:
+  instancias_rsshub:
+    - "https://rsshub.app"
+    - "https://rss.shab.fun"
+  perfis:
+    # Artistas-foco (perfis públicos)
+    - "virginia"
+    - "leonardo"
+    - "murilohuffoficial"
+    - "marilia"                # póstumo, ainda gera engajamento
+    - "henriqueejuliano"
+    - "zenetoecristiano"
+    - "jorgeemateus"
+    - "gusttavolima"

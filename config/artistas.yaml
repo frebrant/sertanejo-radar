@@ -1,0 +1,70 @@
+# Artistas-alvo do radar — FOCO 100% SERTANEJO.
+# Única exceção: Virginia Fonseca (não é cantora mas é central no ecossistema
+# sertanejo via Zé Felipe + relações com artistas).
+#
+# Tiers definem o boost no score de viralidade:
+#   tier_1 (top): boost = 1.0  → prioritários do usuário
+#   tier_2 (médio): boost = 0.6 → duplas/artistas consolidados
+#   tier_3 (baixo): boost = 0.3 → cobertura ampla sertanejo
+
+tier_1:
+  # MAIS importantes para o usuário — máxima prioridade
+  - "Gusttavo Lima"
+  - "Gustavo Lima"
+  - "Embaixador"
+  - "Ze Felipe"
+  - "Zé Felipe"
+  - "Leonardo cantor"
+  - "Cantor Leonardo"
+  - "Virginia"
+  - "Virginia Fonseca"
+  - "Simone Mendes"
+  - "Ana Castela"
+  - "Boiadeira"
+  - "Zeze Di Camargo"
+  - "Zezé Di Camargo"
+  - "Simaria"
+  # Filhos da Virginia — geram muito conteúdo viral
+  - "Maria Alice"
+  - "Maria Flor"
+  - "Jose Leonardo"
+  - "José Leonardo"
+
+tier_2:
+  # Importância média — duplas/artistas consolidados do sertanejo
+  - "Henrique e Juliano"
+  - "Bruno e Marrone"
+  - "Marrone"
+  - "Ze Neto e Cristiano"
+  - "Zé Neto e Cristiano"
+  - "Jorge e Mateus"
+  - "Maiara e Maraisa"
+  - "Maiara"
+  - "Maraisa"
+  - "Marilia Mendonca"
+  - "Marília Mendonça"
+  - "Murilo Huff"
+  - "Eduardo Costa"
+  - "Lauana Prado"
+  - "Naiara Azevedo"
+
+tier_3:
+  # Cobertura ampla — sertanejo geral
+  - "Marcos e Belutti"
+  - "Belutti"
+  - "Fernando e Sorocaba"
+  - "Sorocaba"
+  - "Israel e Rodolffo"
+  - "Rodolffo"
+  - "Hugo e Guilherme"
+  - "Matheus e Kauan"
+  - "Chitãozinho e Xororó"
+  - "Chitaozinho e Xororo"
+  - "Xororó"
+  - "Cesar Menotti e Fabiano"
+  - "Cesar Menotti"
+  - "Edson e Hudson"
+  - "Diego e Victor Hugo"
+  - "Joao Bosco e Vinicius"
+  - "João Bosco e Vinicius"
+  - "Daniel cantor"
