@@ -209,6 +209,96 @@ class GeminiRateLimiter:
         self.timestamps.append(time.time())
 
 
+# ============================================================================
+# Classificador de conteúdo (filtro 2ª camada)
+# ============================================================================
+
+CLASSIFY_PROMPT = """Você está ajudando a curar matérias para uma página de fofocas SERTANEJO no Instagram.
+
+A página NÃO POSTA:
+- Notícias negativas (críticas, polêmicas, processos, cancelamentos, acusações sérias)
+- Divulgações de música (lançamento de single/EP/álbum, bastidores de gravação)
+
+A página POSTA (NÃO bloquear):
+- Tretas, brigas, separações, romances entre artistas (fofoca pura)
+- Críticas leves / comentários de internautas
+- Anúncios de show / turnê
+- Clipes e parcerias
+- Curiosidades, declarações, viagens, vida pessoal
+
+MATÉRIA:
+Título: {title}
+Resumo: {summary}
+
+Responda em JSON puro (sem markdown):
+{{"block": true/false, "reason": "razão curta em 5 palavras"}}
+
+Use block=true APENAS se for claramente negativa OU divulgação de música.
+Na dúvida, use block=false (preferimos enviar e deixar usuário decidir)."""
+
+
+def classify_content(
+    title: str,
+    summary: str = "",
+    api_key: str | None = None,
+) -> tuple[bool, str]:
+    """Pergunta ao Gemini se a matéria deve ser bloqueada.
+
+    Retorna (block, reason). Em caso de erro, sempre retorna (False, "ai_fail")
+    para não bloquear injustamente.
+    """
+    api_key = api_key or os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return False, "no_api_key"
+
+    prompt = CLASSIFY_PROMPT.format(title=title, summary=summary[:300])
+    url = GEMINI_URL.format(model=GEMINI_MODEL)
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.2,           # determinístico para classificação
+            "maxOutputTokens": 200,
+            "responseMimeType": "application/json",
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
+    }
+
+    r = None
+    for attempt in range(2):
+        try:
+            r = requests.post(
+                url,
+                params={"key": api_key},
+                json=body,
+                timeout=REQUEST_TIMEOUT,
+            )
+            if r.status_code != 503:
+                break
+            time.sleep(1 + attempt)
+        except requests.RequestException as exc:
+            log.warning("Gemini classify request falhou: %s", exc)
+            return False, "ai_fail"
+    if r is None or r.status_code != 200:
+        return False, "ai_fail"
+
+    try:
+        data = r.json()
+        text = (
+            data.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+        )
+        text = _strip_md_fences(text)
+        parsed = json.loads(text)
+        block = bool(parsed.get("block", False))
+        reason = str(parsed.get("reason", ""))[:80]
+        return block, ("ai:" + reason if block else "")
+    except (json.JSONDecodeError, KeyError, IndexError, ValueError) as exc:
+        log.warning("Gemini classify parse falhou: %s", exc)
+        return False, "ai_fail"
+
+
 def render_copy_for_telegram(copy: dict) -> str:
     """Formata as 3 sugestões + legenda para entrar na mensagem do Telegram."""
     lines = ["✍️ *Copy pronto:*"]

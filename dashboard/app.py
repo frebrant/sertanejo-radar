@@ -77,7 +77,17 @@ def render_card(row) -> None:
         sources = [row["source"]]
     artists = _artist_names(row["artist_hits"])
 
+    # safe access pra coluna filtered (compat com banco antigo)
+    try:
+        is_filtered = bool(row["filtered"])
+        filter_reason = row["filter_reason"]
+    except (IndexError, KeyError):
+        is_filtered = False
+        filter_reason = None
+
     with st.container(border=True):
+        if is_filtered:
+            st.warning(f"🚫 **Filtrada**: `{filter_reason or 'sem motivo registrado'}`")
         col1, col2 = st.columns([4, 1])
         with col1:
             st.markdown(f"#### {type_emoji} {row['title']}")
@@ -155,6 +165,16 @@ def main() -> None:
         limit = st.slider("Quantidade", 10, 100, 30, 5)
 
         st.divider()
+        st.subheader("⚙️ Avançado")
+        mostrar_filtradas = st.checkbox(
+            "Mostrar matérias filtradas",
+            value=False,
+            help="Matérias bloqueadas por serem negativas (críticas/polêmicas) "
+                 "ou divulgações de música. Marque pra ver o que foi cortado e "
+                 "ajustar as keywords se algo importante foi bloqueado por engano.",
+        )
+
+        st.divider()
         st.caption(
             "💡 O pipeline roda na nuvem a cada 30 min. "
             "Pra atualizar manualmente, vá no GitHub Actions → "
@@ -170,6 +190,7 @@ def main() -> None:
         limit=limit,
         artist_filter=artista_filter,
         source_type_filter=tipo_filter,
+        include_filtered=mostrar_filtradas,
     )
     conn.close()
 

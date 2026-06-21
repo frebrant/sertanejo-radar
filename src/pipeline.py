@@ -8,13 +8,14 @@ from pathlib import Path
 
 import yaml
 
-from .ai_copy import GeminiRateLimiter, generate_copy
+from .ai_copy import GeminiRateLimiter, classify_content, generate_copy
 from .db import (
     fetch_news_needing_copy,
     fetch_pending_notifications,
     fetch_recent_titles,
     get_conn,
     init_schema,
+    mark_filtered,
     mark_notified,
     update_copy,
     update_score,
@@ -24,6 +25,7 @@ from .dedup import canonical_hash, find_artist_hits, find_similar
 from .fetchers import instagram as f_instagram
 from .fetchers import rss as f_rss
 from .fetchers import twitter as f_twitter
+from .filters import filter_by_keywords
 from .notify import notify_rows
 from .scoring import score_news
 
@@ -58,6 +60,8 @@ class PipelineStats:
     notified: int = 0
     copies_gemini: int = 0
     copies_fallback: int = 0
+    filtered_keyword: int = 0
+    filtered_ai: int = 0
 
     def __str__(self) -> str:
         return (
@@ -67,6 +71,8 @@ class PipelineStats:
             f"Inseridas: {self.inserted} | "
             f"Atualizadas (multi-fonte): {self.updated} | "
             f"Puladas (já existia): {self.skipped} | "
+            f"Filtradas (keyword): {self.filtered_keyword} | "
+            f"Filtradas (IA): {self.filtered_ai} | "
             f"Copy IA: {self.copies_gemini} (+{self.copies_fallback} fallback) | "
             f"Notificadas: {self.notified}"
         )
@@ -128,18 +134,13 @@ def run() -> PipelineStats:
 
     for item in all_items:
         title = item["title"]
-        # decide hash: tenta fuzzy contra o conjunto "recent + já vistos nesta run"
-        # find_similar precisa de Rows com keys canonical_hash/title; vamos montar uma lista compatível
+        summary = item.get("summary", "")
         recent_for_match = [
             {"canonical_hash": h, "title": t} for h, t in seen_this_run.items()
         ]
-        # rapidfuzz aceita dict desde que find_similar use índice de chave — adapto função:
-        # como find_similar usa row["canonical_hash"], passamos um objeto com __getitem__
-        similar_hash = find_similar(title, recent_for_match)  # noqa: type
+        similar_hash = find_similar(title, recent_for_match)
         item["canonical_hash"] = similar_hash if similar_hash else canonical_hash(title)
-        item["artist_hits"] = find_artist_hits(title, item.get("summary", ""), artistas)
-
-        # registra para próximo item desta run (evita duplicatas dentro do mesmo batch)
+        item["artist_hits"] = find_artist_hits(title, summary, artistas)
         seen_this_run.setdefault(item["canonical_hash"], title)
 
         status, news_id = upsert_news(conn, item)
@@ -149,6 +150,18 @@ def run() -> PipelineStats:
             stats.updated += 1
         else:
             stats.skipped += 1
+
+        # FILTRO 1 (keyword): se cair em uma das categorias bloqueadas,
+        # marca filtered=1 imediatamente — não vai ser scoreada, não vai
+        # gastar Gemini com copy e não vai notificar.
+        if status == "inserted" and news_id:
+            block, reason = filter_by_keywords(title, summary)
+            if block:
+                mark_filtered(conn, news_id, reason)
+                stats.filtered_keyword += 1
+                # NÃO adiciona em touched_ids — sem score, sem copy, sem notify
+                continue
+
         if news_id:
             touched_ids.append(news_id)
 
@@ -176,13 +189,29 @@ def run() -> PipelineStats:
             )
             update_score(conn, row["id"], s)
 
-    # 4) GERAR COPY IA — só pra matérias com score alto que ainda não têm
+    # 4) GERAR COPY IA — antes, faz filtro 2ª camada com IA pra cortar
+    # matérias borderline que escaparam do keyword filter.
     pending_copy = fetch_news_needing_copy(conn, threshold=COPY_THRESHOLD, limit=COPY_MAX_PER_RUN)
     if pending_copy:
-        log.info("→ Gerando copy IA para %d matérias (score >= %.2f)",
-                 len(pending_copy), COPY_THRESHOLD)
+        log.info("→ Filtrando %d matérias com Gemini antes da copy", len(pending_copy))
         limiter = GeminiRateLimiter(max_per_min=8)
+
+        # 4a) FILTRO 2 (IA): classifica cada matéria pendente
+        survivors = []
         for row in pending_copy:
+            limiter.wait_if_needed()
+            block, reason = classify_content(row["title"], row["summary"] or "")
+            if block:
+                mark_filtered(conn, row["id"], reason)
+                stats.filtered_ai += 1
+            else:
+                survivors.append(row)
+
+        # 4b) GERA COPY apenas para sobreviventes
+        if survivors:
+            log.info("→ Gerando copy IA para %d matérias (de %d, %d filtradas pela IA)",
+                     len(survivors), len(pending_copy), stats.filtered_ai)
+        for row in survivors:
             try:
                 hits_raw = json.loads(row["artist_hits"] or "[]")
             except (json.JSONDecodeError, TypeError):

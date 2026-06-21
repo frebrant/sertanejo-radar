@@ -26,18 +26,23 @@ CREATE TABLE IF NOT EXISTS news (
   notified INTEGER DEFAULT 0,
   copy_titles TEXT,
   copy_caption TEXT,
-  copy_source TEXT
+  copy_source TEXT,
+  filtered INTEGER DEFAULT 0,
+  filter_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_score_pub ON news(score DESC, published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_published ON news(published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_hash ON news(canonical_hash);
+CREATE INDEX IF NOT EXISTS idx_filtered ON news(filtered);
 """
 
-# ALTER TABLE seguro para bancos antigos que ainda não têm as colunas de copy
+# ALTER TABLE seguro para bancos antigos que ainda não têm as colunas novas
 MIGRATIONS = [
     "ALTER TABLE news ADD COLUMN copy_titles TEXT",
     "ALTER TABLE news ADD COLUMN copy_caption TEXT",
     "ALTER TABLE news ADD COLUMN copy_source TEXT",
+    "ALTER TABLE news ADD COLUMN filtered INTEGER DEFAULT 0",
+    "ALTER TABLE news ADD COLUMN filter_reason TEXT",
 ]
 
 
@@ -135,6 +140,14 @@ def update_score(conn: sqlite3.Connection, news_id: int, score: float) -> None:
     conn.commit()
 
 
+def mark_filtered(conn: sqlite3.Connection, news_id: int, reason: str) -> None:
+    conn.execute(
+        "UPDATE news SET filtered = 1, filter_reason = ? WHERE id = ?",
+        (reason[:200], news_id),
+    )
+    conn.commit()
+
+
 def update_copy(
     conn: sqlite3.Connection,
     news_id: int,
@@ -154,13 +167,17 @@ def fetch_news_needing_copy(
     threshold: float = 0.6,
     limit: int = 20,
 ) -> list[sqlite3.Row]:
-    """Matérias com score alto que ainda não têm copy gerada (ou tem fallback)."""
+    """Matérias com score alto que ainda não têm copy gerada (ou tem fallback).
+
+    Exclui filtradas — não gasta Gemini com matéria que vai ser bloqueada.
+    """
     cur = conn.execute(
         """
         SELECT id, title, summary, artist_hits, score
         FROM news
         WHERE score >= ?
           AND (copy_titles IS NULL OR copy_source = 'fallback')
+          AND filtered = 0
           AND published_at >= datetime('now', '-48 hours')
         ORDER BY score DESC, published_at DESC
         LIMIT ?
@@ -186,7 +203,7 @@ def fetch_pending_notifications(
         SELECT id, title, url, source, sources_list, source_count, score, published_at,
                artist_hits, copy_titles, copy_caption, copy_source
         FROM news
-        WHERE score >= ? AND notified = 0
+        WHERE score >= ? AND notified = 0 AND filtered = 0
         ORDER BY score DESC, published_at DESC
         LIMIT ?
         """,
@@ -210,10 +227,18 @@ def fetch_top_news(
     limit: int = 30,
     artist_filter: str | None = None,
     source_type_filter: str | None = None,
+    include_filtered: bool = False,
 ) -> list[sqlite3.Row]:
-    """Para o dashboard: top matérias rankeadas."""
+    """Para o dashboard: top matérias rankeadas.
+
+    Por padrão exclui as `filtered=1` (negativas e divulgações). O dashboard
+    expõe um toggle pra ver as filtradas se a usuária quiser auditar.
+    """
     where_clauses = ["published_at >= datetime('now', ?)"]
     params: list[Any] = [f"-{hours} hours"]
+
+    if not include_filtered:
+        where_clauses.append("filtered = 0")
 
     if source_type_filter:
         where_clauses.append("source_type = ?")
@@ -227,7 +252,8 @@ def fetch_top_news(
     sql = f"""
         SELECT id, title, summary, url, source, source_type, sources_list,
                source_count, score, published_at, artist_hits, notified,
-               copy_titles, copy_caption, copy_source
+               copy_titles, copy_caption, copy_source,
+               filtered, filter_reason
         FROM news
         WHERE {where}
         ORDER BY score DESC, published_at DESC
