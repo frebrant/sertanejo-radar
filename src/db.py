@@ -170,18 +170,27 @@ def fetch_news_needing_copy(
     return cur.fetchall()
 
 
-def fetch_pending_notifications(conn: sqlite3.Connection, threshold: float = 0.75) -> list[sqlite3.Row]:
-    """Matérias com score alto que ainda não foram notificadas."""
+def fetch_pending_notifications(
+    conn: sqlite3.Connection,
+    threshold: float = 0.75,
+    limit: int = 30,
+) -> list[sqlite3.Row]:
+    """Matérias com score alto que ainda não foram notificadas.
+
+    Pega um limite maior (30) para o balanceamento ter mais opções na hora
+    de garantir diversidade de artistas. O balanceamento final é feito no
+    pipeline.balance_notifications().
+    """
     cur = conn.execute(
         """
         SELECT id, title, url, source, sources_list, source_count, score, published_at,
-               copy_titles, copy_caption, copy_source
+               artist_hits, copy_titles, copy_caption, copy_source
         FROM news
         WHERE score >= ? AND notified = 0
         ORDER BY score DESC, published_at DESC
-        LIMIT 10
+        LIMIT ?
         """,
-        (threshold,),
+        (threshold, limit),
     )
     return cur.fetchall()
 

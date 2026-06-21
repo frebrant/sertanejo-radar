@@ -35,6 +35,11 @@ NOTIFY_THRESHOLD = 0.75
 COPY_THRESHOLD = 0.6        # gera copy IA acima deste score
 COPY_MAX_PER_RUN = 15       # limite por execução (margem dos 1.500/dia da Gemini)
 
+# Regras de diversidade nas notificações Telegram (pedido do usuário):
+NOTIFY_MAX_PER_ARTIST = 2   # máximo de matérias do MESMO artista por batch
+NOTIFY_MIN_ARTISTS = 3      # se o batch não cobrir N artistas diferentes, espera próximo run
+NOTIFY_MAX_BATCH = 8        # teto total de notificações por execução
+
 
 @dataclass
 class PipelineStats:
@@ -185,14 +190,98 @@ def run() -> PipelineStats:
             else:
                 stats.copies_fallback += 1
 
-    # 5) NOTIFICAR — só matérias com score alto que ainda não foram notificadas
-    pending = fetch_pending_notifications(conn, threshold=NOTIFY_THRESHOLD)
-    if pending:
-        log.info("→ Enviando %d notificações (score >= %.2f)", len(pending), NOTIFY_THRESHOLD)
-        sent_ids = notify_rows(pending)
-        mark_notified(conn, sent_ids)
-        stats.notified = len(sent_ids)
+    # 5) NOTIFICAR — só matérias com score alto, balanceadas por artista
+    candidates = fetch_pending_notifications(conn, threshold=NOTIFY_THRESHOLD, limit=30)
+    if candidates:
+        batch = balance_notifications(
+            candidates,
+            max_per_artist=NOTIFY_MAX_PER_ARTIST,
+            min_artists=NOTIFY_MIN_ARTISTS,
+            max_total=NOTIFY_MAX_BATCH,
+        )
+        if batch:
+            log.info(
+                "→ Enviando %d notificações (de %d candidatas) cobrindo %d artistas",
+                len(batch), len(candidates), _count_distinct_artists(batch),
+            )
+            sent_ids = notify_rows(batch)
+            mark_notified(conn, sent_ids)
+            stats.notified = len(sent_ids)
+        else:
+            log.info(
+                "→ %d candidatas mas só %d artista(s) distinto(s). "
+                "Aguardando próximo run para diversificar (mínimo %d artistas).",
+                len(candidates), _count_distinct_artists(candidates), NOTIFY_MIN_ARTISTS,
+            )
 
     conn.close()
     log.info("Pipeline finalizado: %s", stats)
     return stats
+
+
+# ---------- Balanceamento de notificações ----------
+
+def _primary_artist(row) -> str:
+    """Devolve o artista 'principal' de uma matéria para fins de balanceamento.
+
+    Critérios (em ordem):
+      1. menor tier (mais importante)
+      2. ordem em que aparece em artist_hits
+      3. se não tiver artist_hits, usa '__sem_artista__' (matérias sem artist
+         caem no mesmo bucket, tratadas como UM 'artista').
+    """
+    try:
+        hits = json.loads(row["artist_hits"] or "[]")
+    except (json.JSONDecodeError, TypeError):
+        hits = []
+    if not hits:
+        return "__sem_artista__"
+    # se for lista de dicts (formato com tier), ordena por tier asc
+    if hits and isinstance(hits[0], dict):
+        hits_sorted = sorted(hits, key=lambda h: h.get("tier", 99))
+        return hits_sorted[0].get("nome", "__sem_artista__")
+    # formato antigo: lista de strings
+    return str(hits[0])
+
+
+def _count_distinct_artists(rows) -> int:
+    return len({_primary_artist(r) for r in rows})
+
+
+def balance_notifications(
+    candidates: list,
+    max_per_artist: int = 2,
+    min_artists: int = 3,
+    max_total: int = 8,
+) -> list:
+    """Seleciona um batch balanceado de notificações.
+
+    Regras (pedido do usuário):
+      - máximo `max_per_artist` matérias do mesmo artista no batch
+      - batch só é enviado se cobre pelo menos `min_artists` artistas distintos
+      - teto de `max_total` mensagens por batch
+      - candidatos JÁ devem vir ordenados por score DESC
+
+    Devolve [] se não consegue atingir min_artists (deixa pra próximo run).
+    """
+    if not candidates:
+        return []
+
+    per_artist: dict[str, int] = {}
+    selected: list = []
+    for row in candidates:
+        artist = _primary_artist(row)
+        if per_artist.get(artist, 0) >= max_per_artist:
+            continue
+        selected.append(row)
+        per_artist[artist] = per_artist.get(artist, 0) + 1
+        if len(selected) >= max_total:
+            break
+
+    # Conta artistas REAIS (ignora bucket "__sem_artista__" — matérias sem
+    # artista detectado não contam para "diversidade")
+    real_artists = {a for a in per_artist if a != "__sem_artista__"}
+    if len(real_artists) < min_artists:
+        return []
+
+    return selected
