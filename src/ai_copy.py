@@ -117,18 +117,36 @@ def generate_copy(
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "temperature": 0.9,
-            "maxOutputTokens": 500,
+            # Gemini 2.5 Flash gasta ~500 tokens em "thinking" antes de responder.
+            # Precisamos margem suficiente para thinking + 200-300 tokens de output JSON.
+            "maxOutputTokens": 1500,
             "responseMimeType": "application/json",
+            # thinkingBudget=0 desliga o thinking mode (tarefa simples não precisa)
+            "thinkingConfig": {"thinkingBudget": 0},
         },
     }
 
+    # Retry para 503 (modelo sobrecarregado) — espera curta entre tentativas
+    r = None
+    for attempt in range(3):
+        try:
+            r = requests.post(
+                url,
+                params={"key": api_key},
+                json=body,
+                timeout=REQUEST_TIMEOUT,
+            )
+            if r.status_code != 503:
+                break
+            log.info("Gemini 503 (tentativa %d/3), aguardando...", attempt + 1)
+            time.sleep(2 + attempt * 2)
+        except requests.RequestException as exc:
+            log.warning("Gemini request falhou: %s", exc)
+            return _fallback_copy(title, artistas)
+    if r is None:
+        return _fallback_copy(title, artistas)
+
     try:
-        r = requests.post(
-            url,
-            params={"key": api_key},
-            json=body,
-            timeout=REQUEST_TIMEOUT,
-        )
         if r.status_code != 200:
             log.warning("Gemini %d: %s", r.status_code, r.text[:200])
             return _fallback_copy(title, artistas)
@@ -163,8 +181,8 @@ def generate_copy(
             "legenda": legenda[:400],
             "source": "gemini",
         }
-    except (requests.RequestException, json.JSONDecodeError, KeyError, IndexError) as exc:
-        log.warning("Gemini falhou: %s", exc)
+    except (json.JSONDecodeError, KeyError, IndexError) as exc:
+        log.warning("Gemini parse falhou: %s", exc)
         return _fallback_copy(title, artistas)
 
 
