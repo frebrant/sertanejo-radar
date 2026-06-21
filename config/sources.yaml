@@ -40,10 +40,12 @@ sertanejo:
   - { nome: "Boa Sertanejo",        url: "https://boasertanejo.com/feed/" }
 
 # ============================================================================
-# TWITTER / X — via instâncias Nitter ou RSSHub (com fallback)
+# TWITTER / X — DESATIVADO (2026: API paga, Nitter/RSSHub bloqueados)
 # ============================================================================
-twitter:
-  # Tenta cada instância nesta ordem; primeira que responder 200 + ter itens vence.
+# Para reativar, renomeie a chave de `twitter_DISABLED` para `twitter`.
+# Os portais (Leo Dias, Metrópoles etc.) já republicam tweets virais em ~30min,
+# então perdemos pouco mantendo desligado. Config preservada para uso futuro.
+twitter_DISABLED:
   instancias_nitter:
     - "https://nitter.privacydev.net"
     - "https://nitter.poast.org"
@@ -53,14 +55,12 @@ twitter:
     - "https://rsshub.app"
     - "https://rss.shab.fun"
   perfis:
-    # ----- Fofoqueiros / portais (cobertura ampla) -----
     - { handle: "leodias",           tag: "fofoqueiro" }
     - { handle: "choquei",           tag: "fofoqueiro" }
     - { handle: "PortalArrependido", tag: "fofoqueiro" }
     - { handle: "central_fofoca",    tag: "fofoqueiro" }
     - { handle: "hugogloss",         tag: "fofoqueiro" }
     - { handle: "metropoles",        tag: "fofoqueiro" }
-    # ----- Oficiais (artistas-foco) -----
     - { handle: "virginia",          tag: "artista" }
     - { handle: "murilohuff",        tag: "artista" }
     - { handle: "leonardo",          tag: "artista" }
@@ -69,18 +69,19 @@ twitter:
     - { handle: "JorgeMateus",       tag: "artista" }
 
 # ============================================================================
-# INSTAGRAM — via RSSHub apenas (com fallback de instâncias)
+# INSTAGRAM — DESATIVADO (2026: Instagram fechou scraping anônimo)
 # ============================================================================
-instagram:
+# Para reativar, renomeie a chave de `instagram_DISABLED` para `instagram`.
+# Alternativas pagas (Apify $5/mês, ScrapeCreators) seriam o próximo passo.
+instagram_DISABLED:
   instancias_rsshub:
     - "https://rsshub.app"
     - "https://rss.shab.fun"
   perfis:
-    # Artistas-foco (perfis públicos)
     - "virginia"
     - "leonardo"
     - "murilohuffoficial"
-    - "marilia"                # póstumo, ainda gera engajamento
+    - "marilia"
     - "henriqueejuliano"
     - "zenetoecristiano"
     - "jorgeemateus"
