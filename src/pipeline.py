@@ -31,14 +31,20 @@ log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = ROOT / "config"
-NOTIFY_THRESHOLD = 0.75
 COPY_THRESHOLD = 0.6        # gera copy IA acima deste score
 COPY_MAX_PER_RUN = 15       # limite por execução (margem dos 1.500/dia da Gemini)
 
 # Regras de diversidade nas notificações Telegram (pedido do usuário):
 NOTIFY_MAX_PER_ARTIST = 2   # máximo de matérias do MESMO artista por batch
-NOTIFY_MIN_ARTISTS = 3      # se o batch não cobrir N artistas diferentes, espera próximo run
+NOTIFY_MIN_ARTISTS = 3      # batch precisa cobrir N artistas distintos
 NOTIFY_MAX_BATCH = 8        # teto total de notificações por execução
+
+# Thresholds em cascata: tenta primeiro com score alto (matérias mais virais).
+# Se NÃO consegue formar um batch que cobre 3 artistas, baixa o threshold e
+# tenta de novo. Assim a Esther recebe SEMPRE notificações em cada run,
+# mesmo que algumas tenham score "só" 0.55 (ainda relevante).
+NOTIFY_THRESHOLDS = [0.75, 0.65, 0.55, 0.45]
+NOTIFY_THRESHOLD = NOTIFY_THRESHOLDS[0]  # mantido para compat e logs
 
 
 @dataclass
@@ -190,29 +196,45 @@ def run() -> PipelineStats:
             else:
                 stats.copies_fallback += 1
 
-    # 5) NOTIFICAR — só matérias com score alto, balanceadas por artista
-    candidates = fetch_pending_notifications(conn, threshold=NOTIFY_THRESHOLD, limit=30)
-    if candidates:
-        batch = balance_notifications(
-            candidates,
+    # 5) NOTIFICAR — threshold em cascata, balanceando por artista.
+    # Tenta primeiro com matérias mais virais (score alto). Se não cobre 3
+    # artistas, baixa o threshold e tenta de novo. Garante que SEMPRE sai algo
+    # quando há matéria nova suficiente, mas prioriza qualidade.
+    batch: list = []
+    threshold_usado: float | None = None
+    candidates_final: list = []
+    for thr in NOTIFY_THRESHOLDS:
+        candidates_final = fetch_pending_notifications(conn, threshold=thr, limit=50)
+        if not candidates_final:
+            continue
+        attempt = balance_notifications(
+            candidates_final,
             max_per_artist=NOTIFY_MAX_PER_ARTIST,
             min_artists=NOTIFY_MIN_ARTISTS,
             max_total=NOTIFY_MAX_BATCH,
         )
-        if batch:
-            log.info(
-                "→ Enviando %d notificações (de %d candidatas) cobrindo %d artistas",
-                len(batch), len(candidates), _count_distinct_artists(batch),
-            )
-            sent_ids = notify_rows(batch)
-            mark_notified(conn, sent_ids)
-            stats.notified = len(sent_ids)
-        else:
-            log.info(
-                "→ %d candidatas mas só %d artista(s) distinto(s). "
-                "Aguardando próximo run para diversificar (mínimo %d artistas).",
-                len(candidates), _count_distinct_artists(candidates), NOTIFY_MIN_ARTISTS,
-            )
+        if attempt:
+            batch = attempt
+            threshold_usado = thr
+            break
+
+    if batch:
+        log.info(
+            "→ Enviando %d notificações (threshold %.2f, %d candidatas) cobrindo %d artistas",
+            len(batch), threshold_usado, len(candidates_final), _count_distinct_artists(batch),
+        )
+        sent_ids = notify_rows(batch)
+        mark_notified(conn, sent_ids)
+        stats.notified = len(sent_ids)
+    else:
+        # Mesmo com threshold mais baixo não tem diversidade suficiente
+        n_cand = len(candidates_final)
+        n_art = _count_distinct_artists(candidates_final) if candidates_final else 0
+        log.info(
+            "→ Sem batch para enviar: mesmo com threshold %.2f só %d candidatas / %d artistas. "
+            "Próximo run tenta de novo.",
+            NOTIFY_THRESHOLDS[-1], n_cand, n_art,
+        )
 
     conn.close()
     log.info("Pipeline finalizado: %s", stats)
