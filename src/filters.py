@@ -1,6 +1,9 @@
 """Filtros de conteúdo: bloqueia matérias que o usuário não quer postar.
 
 Categorias bloqueadas (definidas pelo usuário):
+  0. NÃO-SERTANEJO — matéria que não cita artista da lista nem palavra-chave
+                      do universo sertanejo (a maioria dos portais cobre TODAS
+                      as celebridades, gera muito ruído)
   1. NEGATIVAS — críticas diretas, polêmicas, processos, cancelamentos
   2. DIVULGAÇÃO — lançamento de single/EP/álbum, bastidores de gravação
 
@@ -11,14 +14,77 @@ LIBERADAS (NÃO bloqueia):
   - Clipes / parcerias
   - Curiosidades, declarações, viagens etc.
 
-Estratégia: 2 camadas
-  1. KEYWORDS (rápido, custo zero, pega casos óbvios)
-  2. GEMINI (segunda camada para borderline — chamada via ai_copy)
+Estratégia: 3 camadas
+  1. FILTRO SERTANEJO (matéria precisa ter algum sinal do universo)
+  2. KEYWORDS (negativas + divulgação)
+  3. GEMINI (segunda camada para borderline — chamada via ai_copy)
 """
 from __future__ import annotations
 
 import re
 from unidecode import unidecode
+
+
+def _normalize(text: str) -> str:
+    """Lowercase + sem acento — formato em que comparamos as keywords."""
+    return unidecode(text or "").lower()
+
+
+# ============================================================================
+# CATEGORIA 0: NÃO-SERTANEJO (matéria sem conexão com o gênero)
+# ============================================================================
+
+# Palavras-chave do universo sertanejo que indicam relevância.
+# Se matéria não cita artista da lista (artistas.yaml) E não tem nenhuma
+# dessas palavras → considerado "não-sertanejo" e bloqueado.
+KEYWORDS_SERTANEJO = [
+    # Gênero/identidade
+    "sertanejo", "sertaneja", "sertanejos", "sertanejas",
+    "sertaneja universitaria", "sertanejo universitario",
+    "modao", "moda de viola", "modao raiz",
+    "feminejo", "feminejas",
+    "agroboy", "agro-boy",
+    "country",
+    "musica de raiz", "raiz",
+    "duplas sertanejas", "dupla sertaneja",
+
+    # Mundo / cultura
+    "rodeio", "rodeios",
+    "festa do peao", "peao de boiadeiro", "peao boiadeiro",
+    "barretos", "festa de barretos",
+    "vaquejada", "vaquejadas",
+    "cavalgada",
+    "boiadeira", "boiadeiro",
+    "fazenda", "fazendao",
+    "agronegocio",
+
+    # Eventos / contextos típicos
+    "sao joao", "festa junina",
+    "expo " ,    # ex: Expoagro, Expoinel
+    "expoinel",
+    "expoagro",
+
+    # Outras palavras fortemente associadas
+    "violao caipira", "viola caipira",
+    "caipira",
+    "arrocha",
+    "piseiro", "forro",   # gêneros vizinhos que muitas vezes andam junto
+]
+
+
+def _has_sertanejo_signal(title: str, summary: str, artist_hits) -> bool:
+    """True se matéria tem QUALQUER sinal de relevância sertaneja:
+    - artist_hits não vazio (cita artista da lista)
+    - OU contém alguma palavra-chave do gênero
+    """
+    if artist_hits:
+        return True
+    text = _normalize(f"{title} {summary or ''}")
+    for kw in KEYWORDS_SERTANEJO:
+        # match com fronteira de palavra para evitar 'expo' bater em 'exposicao'
+        if re.search(r"\b" + re.escape(kw) + r"\b", text):
+            return True
+    return False
 
 
 # ============================================================================
@@ -125,23 +191,36 @@ KEYWORDS_DIVULGACAO = [
 # Função principal
 # ============================================================================
 
-def _normalize(text: str) -> str:
-    """Lowercase + sem acento — formato em que comparamos as keywords."""
-    return unidecode(text or "").lower()
-
-
-def filter_by_keywords(title: str, summary: str = "") -> tuple[bool, str]:
+def filter_by_keywords(
+    title: str,
+    summary: str = "",
+    artist_hits=None,
+    source_type: str = "portal",
+) -> tuple[bool, str]:
     """Retorna (block, reason).
 
     block=True significa bloquear a matéria.
     reason indica em qual categoria caiu (pra log/debug).
+
+    Ordem de verificação:
+      1. NÃO-SERTANEJO (pulado se source_type='sertanejo' — esses portais já
+         são focados, não precisam ser filtrados por gênero)
+      2. NEGATIVAS
+      3. DIVULGAÇÃO
     """
+    # 1) Filtro de relevância sertaneja (só para portais gerais)
+    if source_type != "sertanejo":
+        if not _has_sertanejo_signal(title, summary, artist_hits):
+            return True, "nao_sertanejo"
+
     text = _normalize(f"{title} {summary}")
 
+    # 2) Conteúdo negativo
     for kw in KEYWORDS_NEGATIVAS:
         if kw in text:
             return True, f"negativa:{kw}"
 
+    # 3) Divulgação de música
     for kw in KEYWORDS_DIVULGACAO:
         if kw in text:
             return True, f"divulgacao:{kw}"

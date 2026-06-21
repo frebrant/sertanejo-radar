@@ -155,7 +155,12 @@ def run() -> PipelineStats:
         # marca filtered=1 imediatamente — não vai ser scoreada, não vai
         # gastar Gemini com copy e não vai notificar.
         if status == "inserted" and news_id:
-            block, reason = filter_by_keywords(title, summary)
+            block, reason = filter_by_keywords(
+                title,
+                summary,
+                artist_hits=item["artist_hits"],
+                source_type=item.get("source_type", "portal"),
+            )
             if block:
                 mark_filtered(conn, news_id, reason)
                 stats.filtered_keyword += 1
