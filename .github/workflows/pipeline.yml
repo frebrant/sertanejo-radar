@@ -7,7 +7,10 @@ on:
   workflow_dispatch: {}   # botão "Run workflow" no GitHub
 
 concurrency:
-  group: pipeline
+  # Garante que apenas 1 run roda por vez. Se outro for disparado, espera o
+  # anterior terminar (NÃO cancela). Crítico para evitar race condition no
+  # data/radar.db que causa renotificação de matérias já enviadas.
+  group: sertanejo-radar-pipeline
   cancel-in-progress: false
 
 permissions:
@@ -38,17 +41,32 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python scripts/run_pipeline.py
 
-      - name: Commit updated SQLite (if changed)
+      - name: Commit updated SQLite
         run: |
-          set -x
+          set -e
           git config user.name "radar-bot"
           git config user.email "radar-bot@users.noreply.github.com"
-          ls -la data/ || echo "pasta data/ não existe"
-          git status --short
+
+          if [ ! -f data/radar.db ]; then
+            echo "Sem radar.db pra commitar."
+            exit 0
+          fi
+
           git add -f data/radar.db
           if git diff --staged --quiet; then
             echo "Sem mudanças no banco."
-          else
-            git commit -m "auto: pipeline run $(date -u +%Y-%m-%dT%H:%MZ)"
+            exit 0
+          fi
+
+          git commit -m "auto: pipeline run $(date -u +%Y-%m-%dT%H:%MZ)"
+
+          # Com `concurrency` configurado no top do workflow, runs nunca rodam
+          # em paralelo, então este push deve sempre ser fast-forward.
+          # Em caso raro de conflito (push manual no repo, etc.), tenta uma
+          # rebase preservando o radar.db local (`-X ours`) — preserva nossas
+          # marcações de `notified` que evitam reenvio Telegram.
+          if ! git push; then
+            echo "Push falhou — tentando rebase preservando radar.db local..."
+            git pull --rebase -X ours origin main || git rebase --abort
             git push
           fi

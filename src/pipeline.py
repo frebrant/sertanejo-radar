@@ -257,8 +257,12 @@ def run() -> PipelineStats:
             "→ Enviando %d notificações (threshold %.2f, %d candidatas) cobrindo %d artistas",
             len(batch), threshold_usado, len(candidates_final), _count_distinct_artists(batch),
         )
+        # CRÍTICO: marca notified ANTES de chamar Telegram. Se este run morrer
+        # entre marcar e enviar, perdemos 1 notificação MAS nunca duplicamos.
+        # Duplicar é pior do que perder pra UX da Esther.
+        batch_ids = [row["id"] for row in batch]
+        mark_notified(conn, batch_ids)
         sent_ids = notify_rows(batch)
-        mark_notified(conn, sent_ids)
         stats.notified = len(sent_ids)
     else:
         # Mesmo com threshold mais baixo não tem diversidade suficiente
