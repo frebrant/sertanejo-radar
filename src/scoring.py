@@ -1,6 +1,7 @@
 """Fórmula de viralidade.
 
-score = 0.45*frescor + 0.25*multi_fonte + 0.25*bonus_artista + 0.05*bonus_fonte_quente
+score = 0.40*frescor + 0.20*multi_fonte + 0.20*bonus_artista
+      + 0.15*bonus_portal_sertanejo + 0.05*bonus_fonte_quente
 
 - frescor: pesa mais (notícia antiga já foi postada)
 - multi_fonte: 4 fontes distintas confirmando = 1.0
@@ -8,6 +9,8 @@ score = 0.45*frescor + 0.25*multi_fonte + 0.25*bonus_artista + 0.05*bonus_fonte_
     tier 1 (Virginia, Gusttavo, Zé Felipe...) = 1.0
     tier 2 (duplas relevantes)                = 0.6
     tier 3 (cobertura ampla)                  = 0.3
+- bonus_portal_sertanejo: 1.0 se source_type='sertanejo' (Movimento Country,
+    Portal Sertanejo etc.), senão 0. Equilibra fofoca x notícia de sertanejo.
 - bonus_fonte_quente: 1 se source é fofoqueiro Twitter (Choquei etc.)
 """
 from __future__ import annotations
@@ -76,18 +79,26 @@ def calc_bonus_fonte_quente(source: str) -> float:
     return 1.0 if source in FONTES_QUENTES else 0.0
 
 
+def calc_bonus_portal_sertanejo(source_type: str) -> float:
+    """1.0 se vem de portal focado em sertanejo (mais notícia do gênero, menos
+    fofoca de celebridades em geral)."""
+    return 1.0 if source_type == "sertanejo" else 0.0
+
+
 def score_news(
     published_at: Any,
     source_count: int,
     artist_hits: list[str] | None,
     source: str,
+    source_type: str = "portal",
     now: datetime | None = None,
 ) -> float:
     """Score final entre 0 e 1."""
     return round(
-        0.45 * calc_frescor(published_at, now)
-        + 0.25 * calc_multi_fonte(source_count)
-        + 0.25 * calc_bonus_artista(artist_hits)
+        0.40 * calc_frescor(published_at, now)
+        + 0.20 * calc_multi_fonte(source_count)
+        + 0.20 * calc_bonus_artista(artist_hits)
+        + 0.15 * calc_bonus_portal_sertanejo(source_type)
         + 0.05 * calc_bonus_fonte_quente(source),
         4,
     )

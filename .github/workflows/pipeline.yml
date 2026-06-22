@@ -2,8 +2,37 @@ name: Sertanejo Radar Pipeline
 
 on:
   schedule:
-    # A cada 30 minutos (UTC). GitHub pode atrasar alguns minutos em horários de pico.
-    - cron: '*/30 * * * *'
+    # A cada 30 min entre 8h-21h horário Brasília (UTC-3 = 11h-00h UTC).
+    # GitHub Actions costuma atrasar/pular crons em janelas com muita carga,
+    # então definimos cada slot explicitamente em vez de '*/30 11-23 * * *'.
+    # 8h, 8:30, 9h, 9:30 ... 20:30, 21h Brasília:
+    - cron: '0 11 * * *'    # 08:00 BR
+    - cron: '30 11 * * *'   # 08:30 BR
+    - cron: '0 12 * * *'    # 09:00 BR
+    - cron: '30 12 * * *'   # 09:30 BR
+    - cron: '0 13 * * *'    # 10:00 BR
+    - cron: '30 13 * * *'   # 10:30 BR
+    - cron: '0 14 * * *'    # 11:00 BR
+    - cron: '30 14 * * *'   # 11:30 BR
+    - cron: '0 15 * * *'    # 12:00 BR
+    - cron: '30 15 * * *'   # 12:30 BR
+    - cron: '0 16 * * *'    # 13:00 BR
+    - cron: '30 16 * * *'   # 13:30 BR
+    - cron: '0 17 * * *'    # 14:00 BR
+    - cron: '30 17 * * *'   # 14:30 BR
+    - cron: '0 18 * * *'    # 15:00 BR
+    - cron: '30 18 * * *'   # 15:30 BR
+    - cron: '0 19 * * *'    # 16:00 BR
+    - cron: '30 19 * * *'   # 16:30 BR
+    - cron: '0 20 * * *'    # 17:00 BR
+    - cron: '30 20 * * *'   # 17:30 BR
+    - cron: '0 21 * * *'    # 18:00 BR
+    - cron: '30 21 * * *'   # 18:30 BR
+    - cron: '0 22 * * *'    # 19:00 BR
+    - cron: '30 22 * * *'   # 19:30 BR
+    - cron: '0 23 * * *'    # 20:00 BR
+    - cron: '30 23 * * *'   # 20:30 BR
+    - cron: '0 0 * * *'     # 21:00 BR
   workflow_dispatch: {}   # botão "Run workflow" no GitHub
 
 concurrency:

@@ -176,7 +176,7 @@ def run() -> PipelineStats:
         placeholders = ",".join("?" * len(touched_ids_unique))
         rows = conn.execute(
             f"""
-            SELECT id, published_at, source_count, artist_hits, source
+            SELECT id, published_at, source_count, artist_hits, source, source_type
             FROM news WHERE id IN ({placeholders})
             """,
             touched_ids_unique,
@@ -191,6 +191,7 @@ def run() -> PipelineStats:
                 row["source_count"],
                 hits,
                 row["source"],
+                source_type=row["source_type"],
             )
             update_score(conn, row["id"], s)
 
