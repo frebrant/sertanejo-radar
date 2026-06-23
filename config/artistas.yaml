@@ -16,8 +16,6 @@ tier_1:
   - "Zé Felipe"
   - "Leonardo cantor"
   - "Cantor Leonardo"
-  - "Virginia"
-  - "Virginia Fonseca"
   - "Simone Mendes"
   - "Ana Castela"
   - "Boiadeira"
@@ -32,6 +30,8 @@ tier_1:
 
 tier_2:
   # Importância média — duplas/artistas consolidados do sertanejo
+  - "Virginia"
+  - "Virginia Fonseca"
   - "Henrique e Juliano"
   - "Bruno e Marrone"
   - "Marrone"
