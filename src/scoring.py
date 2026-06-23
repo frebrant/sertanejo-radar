@@ -6,9 +6,9 @@ score = 0.40*frescor + 0.20*multi_fonte + 0.20*bonus_artista
 - frescor: pesa mais (notícia antiga já foi postada)
 - multi_fonte: 4 fontes distintas confirmando = 1.0
 - bonus_artista: depende do TIER do artista citado:
-    tier 1 (Virginia, Gusttavo, Zé Felipe...) = 1.0
-    tier 2 (duplas relevantes)                = 0.6
-    tier 3 (cobertura ampla)                  = 0.3
+    tier 1 (Gusttavo, Zé Felipe, Ana Castela...) = 1.0
+    tier 2 (Virginia, duplas relevantes)         = 0.8
+    tier 3 (cobertura ampla)                     = 0.6
 - bonus_portal_sertanejo: 1.0 se source_type='sertanejo' (Movimento Country,
     Portal Sertanejo etc.), senão 0. Equilibra fofoca x notícia de sertanejo.
 - bonus_fonte_quente: 1 se source é fofoqueiro Twitter (Choquei etc.)
@@ -57,8 +57,10 @@ def calc_multi_fonte(source_count: int) -> float:
     return min(1.0, source_count / 4.0)
 
 
-# Boost por tier — quanto menor o tier, maior o peso
-TIER_BOOST = {1: 1.0, 2: 0.6, 3: 0.3}
+# Boost por tier — quanto menor o tier, maior o peso.
+# Diferença de 0.2 entre tiers (era 0.4) — distribui melhor o score entre
+# artistas, evitando que tier 1 monopolize o ranking.
+TIER_BOOST = {1: 1.0, 2: 0.8, 3: 0.6}
 
 
 def calc_bonus_artista(artist_hits: list | None) -> float:
